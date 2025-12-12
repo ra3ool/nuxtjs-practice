@@ -1,70 +1,89 @@
 <template>
-  <UCard>
+  <UCard class="max-w-md mx-auto">
     <template #header>
-      <h2 class="text-2xl font-bold text-center">Welcome Back</h2>
-      <p class="text-gray-600 text-center mt-2">Sign in to your account</p>
+      <div class="text-center">
+        <h1 class="text-3xl font-bold text-gray-900">Reset Password</h1>
+        <p class="text-gray-600 mt-2">
+          Enter your email to receive reset instructions
+        </p>
+      </div>
     </template>
 
     <UAlert
       v-if="error"
-      color="red"
+      color="error"
       variant="soft"
       :title="error"
-      class="mb-4"
+      class="mb-6"
+      :close-button="{
+        icon: 'i-heroicons-x-mark-20-solid',
+        color: 'gray',
+        variant: 'link',
+        padded: false,
+      }"
       @close="error = ''"
     />
 
-    <UForm :schema="schema" :state="state" @submit="onSubmit" class="space-y-4">
-      <UFormGroup label="Email" name="email" required>
+    <UAlert
+      v-if="success"
+      color="success"
+      variant="soft"
+      :title="success"
+      class="mb-6"
+      :close-button="{
+        icon: 'i-heroicons-x-mark-20-solid',
+        color: 'gray',
+        variant: 'link',
+        padded: false,
+      }"
+      @close="success = ''"
+    />
+
+    <UForm :schema="schema" :state="state" @submit="onSubmit" class="space-y-6">
+      <UFormGroup label="Email Address" name="email" required>
         <UInput
           v-model="state.email"
           type="email"
-          placeholder="Enter your email"
+          placeholder="Enter your email address"
           icon="i-heroicons-envelope"
-          :disabled="loading"
+          :disabled="loading || emailSent"
           autocomplete="email"
+          size="lg"
         />
       </UFormGroup>
 
-      <UFormGroup label="Password" name="password" required>
-        <UInput
-          v-model="state.password"
-          type="password"
-          placeholder="Enter your password"
-          icon="i-heroicons-lock-closed"
-          :disabled="loading"
-          autocomplete="current-password"
-        />
-      </UFormGroup>
-
-      <div class="flex items-center justify-between">
-        <UCheckbox
-          v-model="state.remember"
-          label="Remember me"
-          :disabled="loading"
-        />
-        <NuxtLink
-          to="/auth/forgot-password"
-          class="text-sm text-blue-600 hover:underline"
-        >
-          Forgot password?
-        </NuxtLink>
-      </div>
-
-      <UButton type="submit" block :loading="loading" size="lg">
-        Sign In
+      <UButton
+        type="submit"
+        block
+        :loading="loading"
+        size="lg"
+        :disabled="loading || emailSent"
+        class="font-semibold"
+      >
+        <span v-if="!loading && !emailSent">Send Reset Instructions</span>
+        <span v-else-if="loading">Sending...</span>
+        <span v-else>Instructions Sent</span>
       </UButton>
     </UForm>
 
     <template #footer>
-      <div class="text-center">
+      <div class="text-center pt-4 border-t border-gray-200 space-y-2">
+        <p class="text-gray-600">
+          Remember your password?
+          <NuxtLink
+            to="/auth/login"
+            class="text-primary-600 hover:text-primary-500 font-semibold ml-1"
+          >
+            Sign in
+          </NuxtLink>
+        </p>
         <p class="text-gray-600">
           Don't have an account?
           <NuxtLink
             to="/auth/register"
-            class="text-blue-600 hover:underline font-medium"
+            class="text-primary-600 hover:text-primary-500 font-semibold ml-1"
           >
-            Sign up
+            Create account
           </NuxtLink>
         </p>
       </div>
@@ -74,7 +93,7 @@
 
 <script setup lang="ts">
 import { z } from 'zod';
-import type { User } from '~/composables/useAuth';
+import type { ForgotPasswordResponse } from '~/composables/useApi';
 
 definePageMeta({
   layout: 'auth',
@@ -82,64 +101,81 @@ definePageMeta({
 });
 
 useSeoMeta({
-  title: 'Login',
+  title: 'Reset Password - BookHub',
   description:
-    'Sign in to your BookHub account to access your personalized book recommendations and reading lists.',
+    'Reset your BookHub account password. Enter your email to receive password reset instructions.',
   robots: 'noindex, nofollow',
 });
 
 const schema = z.object({
-  email: z.string().email('Invalid email address'),
-  password: z.string().min(6, 'Password must be at least 6 characters'),
+  email: z
+    .string()
+    .min(1, 'Email is required')
+    .email('Please enter a valid email address'),
 });
 
-const state = reactive({
+type FormData = z.infer<typeof schema>;
+
+const state = reactive<FormData>({
   email: '',
-  password: '',
-  remember: false,
 });
 
 const loading = ref(false);
 const error = ref('');
+const success = ref('');
+const emailSent = ref(false);
 
-const { login } = useApi();
-const { setAuth } = useAuth();
+const { forgotPassword } = useApi();
+const toast = useToast();
+const route = useRoute();
+
+// Pre-fill email if provided in query params
+onMounted(() => {
+  const email = route.query.email as string;
+  if (email) {
+    state.email = email;
+  }
+});
 
 async function onSubmit() {
+  if (loading.value || emailSent.value) return;
+
   error.value = '';
+  success.value = '';
   loading.value = true;
 
   try {
-    const response = await login({
-      email: state.email,
-      password: state.password,
-    });
+    const response: ForgotPasswordResponse = await forgotPassword(
+      state.email.toLowerCase().trim(),
+    );
 
-    // Assuming API returns { user, token }
-    // Adjust based on your actual API response structure
-    const user: User = response.user || {
-      id: response.id,
-      name: response.name || state.email.split('@')[0],
-      email: state.email,
-    };
-    const token = response.token || response.access_token;
+    success.value =
+      response.message ||
+      'Password reset instructions have been sent to your email.';
+    emailSent.value = true;
 
-    setAuth(user, token);
-
-    // Show success message
-    const toast = useToast();
     toast.add({
-      title: 'Welcome back!',
-      description: `Logged in as ${user.name}`,
-      color: 'green',
+      title: 'Reset Instructions Sent',
+      description: 'Check your email for password reset instructions.',
+      color: 'success',
     });
 
-    // Redirect to home or intended page
-    const redirect = (useRoute().query.redirect as string) || '/';
-    await navigateTo(redirect);
+    // Auto redirect to login after 10 seconds
+    setTimeout(() => {
+      navigateTo('/auth/login');
+    }, 10000);
   } catch (err: any) {
-    error.value = err.message || 'Invalid email or password. Please try again.';
-    console.error('Login failed:', err);
+    const errorMessage =
+      err.message || 'Failed to send reset instructions. Please try again.';
+    error.value = errorMessage;
+
+    toast.add({
+      title: 'Reset Failed',
+      description: errorMessage,
+      color: 'error',
+    });
+
+    console.error('Forgot password failed:', err);
   } finally {
     loading.value = false;
   }

@@ -1,28 +1,37 @@
 <template>
-  <UCard>
+  <UCard class="max-w-md mx-auto">
     <template #header>
-      <h2 class="text-2xl font-bold text-center">Welcome Back</h2>
-      <p class="text-gray-600 text-center mt-2">Sign in to your account</p>
+      <div class="text-center">
+        <h1 class="text-3xl font-bold text-gray-900">Welcome Back</h1>
+        <p class="text-gray-600 mt-2">Sign in to your BookHub account</p>
+      </div>
     </template>
 
     <UAlert
       v-if="error"
-      color="red"
+      color="error"
       variant="soft"
       :title="error"
-      class="mb-4"
+      class="mb-6"
+      :close-button="{
+        icon: 'i-heroicons-x-mark-20-solid',
+        color: 'gray',
+        variant: 'link',
+        padded: false,
+      }"
       @close="error = ''"
     />
 
-    <UForm :schema="schema" :state="state" @submit="onSubmit" class="space-y-4">
-      <UFormGroup label="Email" name="email" required>
+    <UForm :schema="schema" :state="state" @submit="onSubmit" class="space-y-6">
+      <UFormGroup label="Email Address" name="email" required>
         <UInput
           v-model="state.email"
           type="email"
-          placeholder="Enter your email"
+          placeholder="Enter your email address"
           icon="i-heroicons-envelope"
           :disabled="loading"
           autocomplete="email"
+          size="lg"
         />
       </UFormGroup>
 
@@ -34,6 +43,7 @@
           icon="i-heroicons-lock-closed"
           :disabled="loading"
           autocomplete="current-password"
+          size="lg"
         />
       </UFormGroup>
 
@@ -45,26 +55,34 @@
         />
         <NuxtLink
           to="/auth/forgot-password"
-          class="text-sm text-blue-600 hover:underline"
+          class="text-sm text-primary-600 hover:text-primary-500 font-medium"
         >
           Forgot password?
         </NuxtLink>
       </div>
 
-      <UButton type="submit" block :loading="loading" size="lg">
-        Sign In
+      <UButton
+        type="submit"
+        block
+        :loading="loading"
+        size="lg"
+        :disabled="loading"
+        class="font-semibold"
+      >
+        <span v-if="!loading">Sign In</span>
+        <span v-else>Signing In...</span>
       </UButton>
     </UForm>
 
     <template #footer>
-      <div class="text-center">
+      <div class="text-center pt-4 border-t border-gray-200">
         <p class="text-gray-600">
           Don't have an account?
           <NuxtLink
             to="/auth/register"
-            class="text-blue-600 hover:underline font-medium"
+            class="text-primary-600 hover:text-primary-500 font-semibold ml-1"
           >
-            Sign up
+            Create account
           </NuxtLink>
         </p>
       </div>
@@ -74,6 +92,7 @@
 
 <script setup lang="ts">
 import { z } from 'zod';
+import type { LoginResponse } from '~/composables/useApi';
 import type { User } from '~/composables/useAuth';
 
 definePageMeta({
@@ -82,18 +101,26 @@ definePageMeta({
 });
 
 useSeoMeta({
-  title: 'Login',
+  title: 'Sign In - BookHub',
   description:
     'Sign in to your BookHub account to access your personalized book recommendations and reading lists.',
   robots: 'noindex, nofollow',
 });
 
 const schema = z.object({
-  email: z.string().email('Invalid email address'),
-  password: z.string().min(6, 'Password must be at least 6 characters'),
+  email: z
+    .string()
+    .min(1, 'Email is required')
+    .email('Please enter a valid email address'),
+  password: z
+    .string()
+    .min(1, 'Password is required')
+    .min(6, 'Password must be at least 6 characters'),
 });
 
-const state = reactive({
+type FormData = z.infer<typeof schema>;
+
+const state = reactive<FormData & { remember: boolean }>({
   email: '',
   password: '',
   remember: false,
@@ -104,41 +131,55 @@ const error = ref('');
 
 const { login } = useApi();
 const { setAuth } = useAuth();
+const toast = useToast();
+const route = useRoute();
 
 async function onSubmit() {
+  if (loading.value) return;
+
   error.value = '';
   loading.value = true;
 
   try {
-    const response = await login({
+    const response: LoginResponse = await login({
       email: state.email,
       password: state.password,
     });
 
-    // Assuming API returns { user, token }
-    // Adjust based on your actual API response structure
-    const user: User = response.user || {
-      id: response.id,
-      name: response.name || state.email.split('@')[0],
-      email: state.email,
+    const user: User = {
+      id: response.user.id,
+      name: response.user.name,
+      email: response.user.email,
+      avatar: response.user.avatar,
     };
+
     const token = response.token || response.access_token;
+
+    if (!token) {
+      throw new Error('No authentication token received');
+    }
 
     setAuth(user, token);
 
-    // Show success message
-    const toast = useToast();
     toast.add({
       title: 'Welcome back!',
-      description: `Logged in as ${user.name}`,
-      color: 'green',
+      description: `Successfully signed in as ${user.name}`,
+      color: 'success',
     });
 
-    // Redirect to home or intended page
-    const redirect = (useRoute().query.redirect as string) || '/';
+    const redirect = (route.query.redirect as string) || '/';
     await navigateTo(redirect);
   } catch (err: any) {
-    error.value = err.message || 'Invalid email or password. Please try again.';
+    const errorMessage =
+      err.message || 'Invalid email or password. Please try again.';
+    error.value = errorMessage;
+
+    toast.add({
+      title: 'Sign In Failed',
+      description: errorMessage,
+      color: 'error',
+    });
+
     console.error('Login failed:', err);
   } finally {
     loading.value = false;
