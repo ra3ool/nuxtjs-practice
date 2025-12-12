@@ -4,6 +4,58 @@ export interface ApiError {
   data?: any;
 }
 
+export interface LoginResponse {
+  user: {
+    id: string | number;
+    name: string;
+    email: string;
+    avatar?: string;
+  };
+  token: string;
+  access_token?: string;
+}
+
+export interface RegisterResponse {
+  user: {
+    id: string | number;
+    name: string;
+    email: string;
+    avatar?: string;
+  };
+  token?: string;
+  message?: string;
+}
+
+export interface ForgotPasswordResponse {
+  message: string;
+  success: boolean;
+}
+
+export interface BooksResponse {
+  data: any[];
+  total: number;
+  page: number;
+  limit: number;
+}
+
+export interface BookResponse {
+  id: string | number;
+  title: string;
+  author: string;
+  description?: string;
+  cover?: string;
+  category?: string;
+}
+
+export interface CategoriesResponse {
+  data: Array<{
+    id: string | number;
+    name: string;
+    description?: string;
+    books_count?: number;
+  }>;
+}
+
 export const useApi = () => {
   const config = useRuntimeConfig();
   const { token } = useAuth();
@@ -39,17 +91,17 @@ export const useApi = () => {
   });
 
   // Books API
-  const getBooks = async (params: Record<string, any> = {}) => {
+  const getBooks = async (params: Record<string, any> = {}): Promise<BooksResponse> => {
     try {
-      return await api('/books', { params });
+      return await api<BooksResponse>('/books', { params });
     } catch (error: any) {
       throw handleApiError(error);
     }
   };
 
-  const getBook = async (id: string | number) => {
+  const getBook = async (id: string | number): Promise<BookResponse> => {
     try {
-      return await api(`/books/${id}`);
+      return await api<BookResponse>(`/books/${id}`);
     } catch (error: any) {
       throw handleApiError(error);
     }
@@ -58,9 +110,9 @@ export const useApi = () => {
   const searchBooks = async (
     query: string,
     params: Record<string, any> = {},
-  ) => {
+  ): Promise<BooksResponse> => {
     try {
-      return await api('/books/search', {
+      return await api<BooksResponse>('/books/search', {
         params: { q: query, ...params },
       });
     } catch (error: any) {
@@ -69,9 +121,9 @@ export const useApi = () => {
   };
 
   // Categories API
-  const getCategories = async () => {
+  const getCategories = async (): Promise<CategoriesResponse> => {
     try {
-      return await api('/categories');
+      return await api<CategoriesResponse>('/categories');
     } catch (error: any) {
       throw handleApiError(error);
     }
@@ -80,18 +132,18 @@ export const useApi = () => {
   const getCategoryBooks = async (
     id: string | number,
     params: Record<string, any> = {},
-  ) => {
+  ): Promise<BooksResponse> => {
     try {
-      return await api(`/categories/${id}/books`, { params });
+      return await api<BooksResponse>(`/categories/${id}/books`, { params });
     } catch (error: any) {
       throw handleApiError(error);
     }
   };
 
   // Auth API
-  const login = async (credentials: { email: string; password: string }) => {
+  const login = async (credentials: { email: string; password: string }): Promise<LoginResponse> => {
     try {
-      const response = await api('/auth/login', {
+      const response = await api<LoginResponse>('/auth/login', {
         method: 'POST',
         body: credentials,
       });
@@ -105,11 +157,23 @@ export const useApi = () => {
     name: string;
     email: string;
     password: string;
-  }) => {
+  }): Promise<RegisterResponse> => {
     try {
-      const response = await api('/auth/register', {
+      const response = await api<RegisterResponse>('/auth/register', {
         method: 'POST',
         body: userData,
+      });
+      return response;
+    } catch (error: any) {
+      throw handleApiError(error);
+    }
+  };
+
+  const forgotPassword = async (email: string): Promise<ForgotPasswordResponse> => {
+    try {
+      const response = await api<ForgotPasswordResponse>('/auth/forgot-password', {
+        method: 'POST',
+        body: { email },
       });
       return response;
     } catch (error: any) {
@@ -148,6 +212,7 @@ export const useApi = () => {
     getCategoryBooks,
     login,
     register,
+    forgotPassword,
     logout,
   };
 };
